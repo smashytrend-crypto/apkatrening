@@ -23,27 +23,138 @@
 <div id="root"></div>
 <script>
 /* Wersja na telefon (GitHub Pages): dane zapisują się w pamięci tej aplikacji na telefonie.
-   Kopia zapasowa zapisuje się jako plik (udostępnij / pobierz), a aplikacja działa bez internetu. */
+   Zabezpieczenia danych:
+   1) każdy zapis jest dublowany w drugiej pamięci (IndexedDB) + dzienne kopie z 14 dni;
+      jeśli główna pamięć jest pusta lub uszkodzona, dane są odtwarzane przed startem aplikacji,
+   2) przypomnienie o kopii do pliku, gdy ostatnia była ponad 7 dni temu,
+   3) prośba do przeglądarki o trwałe przechowywanie danych.
+   Kod aplikacji jest identyczny z wersją na claude.ai. */
 (function () {
+  var KLUCZ = "trening:v4", OSTATNIA = "gb:ostatniaKopiaPliku", DNI_KOPII = 14;
+
+  // --- druga pamięć (IndexedDB) ---
+  function baza() {
+    return new Promise(function (ok, bl) {
+      var r = indexedDB.open("dziennik-kopie", 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore("kopie"); };
+      r.onsuccess = function () { ok(r.result); };
+      r.onerror = function () { bl(r.error); };
+    });
+  }
+  function idb(tryb, fn) {
+    return baza().then(function (db) {
+      return new Promise(function (ok, bl) {
+        var t = db.transaction("kopie", tryb), s = t.objectStore("kopie"), wynik;
+        fn(s, function (w) { wynik = w; });
+        t.oncomplete = function () { ok(wynik); };
+        t.onerror = function () { bl(t.error); };
+      });
+    });
+  }
+  function dzis() {
+    var d = new Date(), z = function (n) { return (n < 10 ? "0" : "") + n; };
+    return d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate());
+  }
+  function poprawne(tekst) {
+    try { var j = JSON.parse(tekst); return j && Array.isArray(j.workouts); } catch (e) { return false; }
+  }
+  function dubluj(tekst) {
+    if (!poprawne(tekst)) return;
+    idb("readwrite", function (s) {
+      s.put(tekst, "ostatnia");
+      s.put(tekst, "dzien-" + dzis());
+      var r = s.getAllKeys();
+      r.onsuccess = function () {
+        var dni = r.result.filter(function (k) { return String(k).indexOf("dzien-") === 0; }).sort();
+        dni.slice(0, Math.max(0, dni.length - DNI_KOPII)).forEach(function (k) { s.delete(k); });
+      };
+    }).catch(function () {});
+  }
+  // Każdy zapis aplikacji do pamięci głównej trafia też do drugiej pamięci.
+  var zapisOryg = Storage.prototype.setItem;
+  Storage.prototype.setItem = function (k, v) {
+    zapisOryg.apply(this, arguments);
+    if (this === window.localStorage && k === KLUCZ) dubluj(String(v));
+  };
+  // Przed startem aplikacji: odtworzenie danych, jeśli pamięć główna jest pusta/uszkodzona.
+  var gotowe = (function () {
+    var glowna = null;
+    try { glowna = localStorage.getItem(KLUCZ); } catch (e) {}
+    if (glowna && poprawne(glowna)) { dubluj(glowna); return Promise.resolve(); }
+    return idb("readonly", function (s, wynik) {
+      var r = s.get("ostatnia"); r.onsuccess = function () { wynik(r.result); };
+    }).then(function (kopia) {
+      if (kopia && poprawne(kopia)) {
+        zapisOryg.call(localStorage, KLUCZ, kopia);
+        zapisOryg.call(localStorage, KLUCZ + ":at", String(Date.now()));
+      }
+    }).catch(function () {});
+  })();
+
+  // --- zapis kopii do pliku ---
   function zapiszPlik(o) {
     var plik = new File([o.data], o.filename, { type: "application/json" });
+    var p;
     if (navigator.canShare && navigator.canShare({ files: [plik] }))
-      return navigator.share({ files: [plik], title: o.filename });
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(plik);
-    a.download = o.filename;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    return Promise.resolve();
+      p = navigator.share({ files: [plik], title: o.filename });
+    else {
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(plik);
+      a.download = o.filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      p = Promise.resolve();
+    }
+    return p.then(function () {
+      try { zapisOryg.call(localStorage, OSTATNIA, String(Date.now())); } catch (e) {}
+      var pasek = document.getElementById("gb-przypomnienie");
+      if (pasek) pasek.remove();
+    });
   }
   window.claude = {
-    use: function (n) { return Promise.resolve(n === "downloads" ? { save: zapiszPlik } : null); },
+    use: function (n) {
+      if (n === "db") return gotowe.then(function () { return null; }); // dane lokalne, po odtworzeniu
+      return Promise.resolve(n === "downloads" ? { save: zapiszPlik } : null);
+    },
   };
-  // Prośba do przeglądarki, żeby nie czyściła danych aplikacji.
+
+  // --- przypomnienie o kopii do pliku (co 7 dni) ---
+  function przypomnij() {
+    var dane = null, ost = 0;
+    try { dane = JSON.parse(localStorage.getItem(KLUCZ) || "null"); ost = Number(localStorage.getItem(OSTATNIA)) || 0; } catch (e) {}
+    if (!dane || !dane.workouts || !dane.workouts.length) return;
+    if (Date.now() - ost < 7 * 864e5) return;
+    var dni = ost ? Math.floor((Date.now() - ost) / 864e5) : null;
+    var pasek = document.createElement("div");
+    pasek.id = "gb-przypomnienie";
+    pasek.setAttribute("style", "position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 8px);z-index:70;width:calc(100% - 24px);max-width:406px;box-sizing:border-box;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:#F6EAE9;border:1px solid rgba(199,54,44,.3);box-shadow:0 12px 28px -14px rgba(21,23,28,.5);font:600 12.5px Manrope,-apple-system,sans-serif;color:#4D525C");
+    var t = document.createElement("span");
+    t.style.flex = "1";
+    t.textContent = dni == null ? "Zrób kopię zapasową danych do pliku — dane są tylko w tym telefonie." : "Ostatnia kopia do pliku: " + dni + " dni temu. Zrób nową.";
+    var b = document.createElement("button");
+    b.textContent = "Zapisz kopię";
+    b.setAttribute("style", "border:none;border-radius:9px;padding:8px 11px;background:#C7362C;color:#fff;font:700 12.5px Manrope,-apple-system,sans-serif;cursor:pointer;white-space:nowrap");
+    b.onclick = function () {
+      var d = JSON.parse(localStorage.getItem(KLUCZ));
+      var tekst = JSON.stringify({ aplikacja: "Dziennik Gladiatora", wersja: 1, zapisano: new Date().toISOString(),
+        dane: { workouts: d.workouts || [], custom: d.custom || [], templates: d.templates || [], weights: d.weights || {},
+          measures: d.measures || {}, ustawienia: d.ustawienia || {}, kalkulator: d.kalkulator || null } }, null, 2);
+      zapiszPlik({ filename: "dziennik-gladiatora-" + dzis() + ".json", data: tekst }).catch(function () {});
+    };
+    var x = document.createElement("button");
+    x.textContent = "×"; x.setAttribute("aria-label", "Później");
+    x.setAttribute("style", "border:none;background:none;font-size:18px;color:#868C96;cursor:pointer;padding:0 2px");
+    x.onclick = function () { pasek.remove(); };
+    pasek.appendChild(t); pasek.appendChild(b); pasek.appendChild(x);
+    document.body.appendChild(pasek);
+  }
+
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
-  if ("serviceWorker" in navigator)
-    window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+  window.addEventListener("load", function () {
+    setTimeout(przypomnij, 1500);
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function () {});
+  });
 })();
 </script>
 <script>
