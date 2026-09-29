@@ -150,9 +150,64 @@
     document.body.appendChild(pasek);
   }
 
+  // --- przeniesienie danych z wersji na claude.ai (zaszyfrowane w pliku dane.enc.json) ---
+  function b64(t) { return Uint8Array.from(atob(t), function (c) { return c.charCodeAt(0); }); }
+  function odszyfruj(p, kod) {
+    var n = String(kod).toLowerCase().replace(/[^a-z0-9]/g, "");
+    return crypto.subtle.importKey("raw", new TextEncoder().encode(n), "PBKDF2", false, ["deriveKey"])
+      .then(function (k) {
+        return crypto.subtle.deriveKey({ name: "PBKDF2", salt: b64(p.sol), iterations: p.iter, hash: "SHA-256" },
+          k, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+      })
+      .then(function (k) { return crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(p.iv) }, k, b64(p.szyfr)); })
+      .then(function (buf) { return JSON.parse(new TextDecoder().decode(buf)); });
+  }
+  function przeniesienie() {
+    var jest = null;
+    try { jest = localStorage.getItem(KLUCZ); if (sessionStorage.getItem("gb:pominieto")) return; } catch (e) {}
+    if (jest && poprawne(jest)) return;
+    fetch("dane.enc.json").then(function (r) { return r.ok ? r.json() : null; }).then(function (p) {
+      if (!p || !p.szyfr) return;
+      var tlo = document.createElement("div");
+      tlo.id = "gb-przeniesienie";
+      tlo.setAttribute("style", "position:fixed;inset:0;z-index:80;background:rgba(21,23,28,.55);display:flex;align-items:center;justify-content:center;padding:20px;font-family:Manrope,-apple-system,sans-serif");
+      tlo.innerHTML =
+        '<div style="width:100%;max-width:360px;background:#F7F8F9;border:1px solid #D8DAE0;border-radius:20px;padding:22px 18px;box-shadow:0 24px 60px -20px rgba(21,23,28,.6)">' +
+        '<div style="font-size:20px;font-weight:800;letter-spacing:-.03em;color:#15171C">Przenieś swoje dane</div>' +
+        '<p style="font-size:13.5px;color:#4D525C;line-height:1.5;margin:8px 0 14px">Wpisz kod, który dostałeś od Claude. Wczytam Twoje treningi, bloki, wagę i ustawienia z poprzedniej wersji aplikacji.</p>' +
+        '<input id="gb-kod" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="xxxx-xxxx-xxxx" style="width:100%;box-sizing:border-box;padding:12px 13px;font:600 17px Manrope,-apple-system,sans-serif;letter-spacing:.06em;border:1px solid #D8DAE0;border-radius:11px;background:#fff;color:#15171C">' +
+        '<div id="gb-kod-blad" style="display:none;margin-top:8px;font-size:12.5px;color:#C7362C;font-weight:600"></div>' +
+        '<button id="gb-kod-ok" style="display:block;width:100%;margin-top:14px;padding:12px;border:none;border-radius:13px;background:linear-gradient(180deg,#D0392E,#A72C23);color:#fff;font:600 14px Manrope,-apple-system,sans-serif;cursor:pointer">Wczytaj moje dane</button>' +
+        '<button id="gb-kod-pomin" style="display:block;width:100%;margin-top:9px;padding:12px;border:1px solid #D8DAE0;border-radius:13px;background:#F7F8F9;color:#15171C;font:600 14px Manrope,-apple-system,sans-serif;cursor:pointer">Nie teraz</button>' +
+        "</div>";
+      document.body.appendChild(tlo);
+      var pole = document.getElementById("gb-kod"), blad = document.getElementById("gb-kod-blad"), ok = document.getElementById("gb-kod-ok");
+      function wczytaj() {
+        blad.style.display = "none"; ok.disabled = true; ok.textContent = "Wczytuję…";
+        odszyfruj(p, pole.value).then(function (d) {
+          if (!d || typeof d.value !== "string" || !poprawne(d.value)) throw new Error("dane");
+          zapisOryg.call(localStorage, KLUCZ, d.value);
+          zapisOryg.call(localStorage, KLUCZ + ":at", String(Date.now()));
+          dubluj(d.value);
+          setTimeout(function () { location.reload(); }, 300);
+        }).catch(function () {
+          ok.disabled = false; ok.textContent = "Wczytaj moje dane";
+          blad.textContent = "Nieprawidłowy kod — sprawdź i spróbuj jeszcze raz."; blad.style.display = "block";
+        });
+      }
+      ok.onclick = wczytaj;
+      pole.onkeydown = function (e) { if (e.key === "Enter") wczytaj(); };
+      document.getElementById("gb-kod-pomin").onclick = function () {
+        try { sessionStorage.setItem("gb:pominieto", "1"); } catch (e) {}
+        tlo.remove();
+      };
+    }).catch(function () {});
+  }
+
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
   window.addEventListener("load", function () {
     setTimeout(przypomnij, 1500);
+    gotowe.then(przeniesienie);
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function () {});
   });
 })();

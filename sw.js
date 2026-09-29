@@ -1,8 +1,8 @@
 // Działanie bez internetu: pliki aplikacji są trzymane w pamięci telefonu.
 // Przy połączeniu pobierana jest najnowsza wersja; bez połączenia działa zapisana.
-const PAMIEC = "dziennik-v2";
+const PAMIEC = "dziennik-v3";
 const PLIKI = ["./", "index.html", "fonts.css", "manifest.webmanifest", "icon-192.png", "icon-512.png",
-  "apple-touch-icon.png", "favicon-32.png",
+  "apple-touch-icon.png", "favicon-32.png", "dane.enc.json",
   "fonts/cinzel-latin-63551c.woff2", "fonts/cinzel-latin-ext-53a6c3.woff2",
   "fonts/manrope-latin-cf48e3.woff2", "fonts/manrope-latin-ext-b4290e.woff2"];
 
