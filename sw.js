@@ -1,7 +1,9 @@
-// Działanie bez internetu: pliki aplikacji są trzymane w pamięci telefonu.
-// Przy połączeniu pobierana jest najnowsza wersja; bez połączenia działa zapisana.
-const PAMIEC = "dziennik-v4";
-const PLIKI = ["./", "index.html", "fonts.css", "manifest.webmanifest", "icon-192.png", "icon-512.png",
+// Działanie bez internetu i szybki start.
+// Aplikacja otwiera się od razu z pamięci telefonu (nie czeka na zasięg),
+// a w tle pobiera nowszą wersję — będzie widoczna przy następnym uruchomieniu.
+// Ten plik dotyczy wyłącznie plików aplikacji; dane treningowe są w innym miejscu i nie są tu ruszane.
+const PAMIEC = "dziennik-a2d2798fa6";
+const PLIKI = ["./", "index.html", "app.a2d2798fa6.js", "fonts.css", "manifest.webmanifest", "icon-192.png", "icon-512.png",
   "apple-touch-icon.png", "favicon-32.png", "dane.enc.json",
   "fonts/cinzel-latin-63551c.woff2", "fonts/cinzel-latin-ext-53a6c3.woff2",
   "fonts/manrope-latin-cf48e3.woff2", "fonts/manrope-latin-ext-b4290e.woff2"];
@@ -16,13 +18,19 @@ self.addEventListener("activate", (e) => {
   );
 });
 self.addEventListener("fetch", (e) => {
-  if (e.request.method !== "GET" || new URL(e.request.url).origin !== location.origin) return;
+  const req = e.request;
+  if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request)
-      .then((r) => {
-        if (r.ok) { const kopia = r.clone(); caches.open(PAMIEC).then((c) => c.put(e.request, kopia)); }
-        return r;
-      })
-      .catch(() => caches.match(e.request, { ignoreSearch: true }).then((r) => r || caches.match("index.html"))),
+    caches.open(PAMIEC).then(async (c) => {
+      const zapisany = await c.match(req, { ignoreSearch: true });
+      const zSieci = fetch(req)
+        .then((r) => { if (r.ok) c.put(req, r.clone()); return r; })
+        .catch(() => null);
+      if (zapisany) { e.waitUntil(zSieci); return zapisany; }
+      const r = await zSieci;
+      if (r) return r;
+      if (req.mode === "navigate") return (await c.match("index.html")) || Response.error();
+      return Response.error();
+    }),
   );
 });

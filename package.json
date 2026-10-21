@@ -1,0 +1,7 @@
+{
+  "name": "apkatrening",
+  "private": true,
+  "description": "Dziennik Gladiatora — wersja na telefon (GitHub Pages)",
+  "scripts": { "build": "node zbuduj.js" },
+  "devDependencies": { "esbuild": "0.25.12" }
+}
