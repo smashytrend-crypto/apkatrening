@@ -2,8 +2,8 @@
 // Aplikacja otwiera się od razu z pamięci telefonu (nie czeka na zasięg),
 // a w tle pobiera nowszą wersję — będzie widoczna przy następnym uruchomieniu.
 // Ten plik dotyczy wyłącznie plików aplikacji; dane treningowe są w innym miejscu i nie są tu ruszane.
-const PAMIEC = "dziennik-36db1c029a";
-const PLIKI = ["./", "index.html", "app.36db1c029a.js", "fonts.css", "manifest.webmanifest", "icon-192.png", "icon-512.png",
+const PAMIEC = "dziennik-c38751cdcd";
+const PLIKI = ["./", "index.html", "app.c38751cdcd.js", "fonts.css", "manifest.webmanifest", "icon-192.png", "icon-512.png",
   "apple-touch-icon.png", "favicon-32.png", "dane.enc.json",
   "fonts/cinzel-latin-63551c.woff2", "fonts/cinzel-latin-ext-53a6c3.woff2",
   "fonts/manrope-latin-cf48e3.woff2", "fonts/manrope-latin-ext-b4290e.woff2"];
