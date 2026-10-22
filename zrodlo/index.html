@@ -1495,8 +1495,9 @@ function XsPozniej(e) {
   );
 }
 // Zegar przerwy: tylko odlicza czas, bez żadnego dźwięku. Widoczny na każdej zakładce i każdym ekranie,
-// dopóki trwa trening. Koniec przerwy jest zapamiętany osobno (poza danymi treningowymi),
-// więc zegar wraca także wtedy, gdy telefon zamknie aplikację działającą w tle.
+// dopóki trwa trening. Zapamiętana jest godzina końca przerwy (osobno, poza danymi treningowymi),
+// więc czas płynie także w tle: po powrocie z innej aplikacji, a nawet po zamknięciu aplikacji
+// przez telefon, zegar pokazuje dokładnie tyle, ile minęło.
 var PRZERWA_KLUCZ = "gb:przerwa";
 function czytajPrzerwe() {
   try {
@@ -1534,11 +1535,12 @@ function ZegarPrzerwy({
     pig = (0, c.useRef)(null),
     ustaw = (k) => (I(k), zapiszPrzerwe(k, id));
   // nowy trening = nowa przerwa; po ponownym otwarciu aplikacji przerwa tego samego treningu wraca
+  // (bez względu na to, jak długo aplikacja była zamknięta)
   (0, c.useEffect)(() => {
     if (W.current === id) return;
     W.current = id;
     let z = czytajPrzerwe();
-    id != null && z && z.trening === id && z.koniec > Date.now() - 18e5
+    id != null && z && z.trening === id
       ? I(z.koniec)
       : (I(null), F.current.clear(), zapiszPrzerwe(null));
   }, [id]);
@@ -1663,13 +1665,25 @@ function ZegarPrzerwy({
   });
 }
 // Fragment ekranu odświeżany co określony czas (zegary), bez odświeżania reszty ekranu.
+// Po powrocie do aplikacji odświeża się od razu, żeby nie pokazać na chwilę starego czasu.
 function Tik({ co: e, children: t }) {
   let [, r] = (0, c.useState)(0);
   return (
     (0, c.useEffect)(() => {
       if (!e) return;
-      let n = setInterval(() => r((i) => i + 1), e);
-      return () => clearInterval(n);
+      let n = setInterval(() => r((i) => i + 1), e),
+        teraz = () => document.visibilityState === "visible" && r((i) => i + 1);
+      return (
+        document.addEventListener("visibilitychange", teraz),
+        window.addEventListener("pageshow", teraz),
+        window.addEventListener("focus", teraz),
+        () => {
+          (clearInterval(n),
+            document.removeEventListener("visibilitychange", teraz),
+            window.removeEventListener("pageshow", teraz),
+            window.removeEventListener("focus", teraz));
+        }
+      );
     }, [e]),
     t()
   );
