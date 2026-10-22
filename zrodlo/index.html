@@ -847,7 +847,10 @@ var QI = Hee.map(([e, t, r], n) => ({
 .gb input, .gb textarea, .gb select { -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; }
 .gb-tabs { background:rgba(255,255,255,.8); -webkit-backdrop-filter:saturate(1.8) blur(18px); backdrop-filter:saturate(1.8) blur(18px); view-transition-name:gb-pasek; }
 .gb-rest-pill { view-transition-name:gb-przerwa; overflow:hidden; }
-.gb-body:has(.gb-rest-pill) { padding-bottom:calc(172px + env(safe-area-inset-bottom, 0px)); }
+.gb-rest-pill.bez-paska { bottom:calc(16px + env(safe-area-inset-bottom, 0px)); }
+/* miejsce pod zegarem przerwy, żeby nie zasłaniał końca ekranu */
+.gb-shell.z-przerwa .gb-body { padding-bottom:calc(172px + env(safe-area-inset-bottom, 0px)); }
+.gb-shell.z-przerwa.bez-paska { padding-bottom:calc(84px + env(safe-area-inset-bottom, 0px)); }
 .gb-rest-postep { position:absolute; left:20px; right:20px; bottom:2px; height:3px; border-radius:3px; background:var(--red); transform-origin:left center; transition:transform .25s linear; opacity:.9; pointer-events:none; }
 .gb-pr { animation:gbPopPr .5s cubic-bezier(.3,1.6,.5,1) both; }
 @keyframes gbPopPr { 0% { transform:scale(.4); opacity:0; } 100% { transform:scale(1); opacity:1; } }
@@ -1326,195 +1329,7 @@ var rte = () =>
       "span",
       { className: "gb-emoji", role: "img", "aria-hidden": "true" },
       "\u{1F4AA}",
-    ),
-  Lr = (() => {
-    let t = [{ f: 1046.5, t: 0, d: 0.22, tau: 0.07, a: 0.6 }],
-      r = [
-        { f: 1046.5, t: 0, d: 1, tau: 0.3, a: 0.5 },
-        { f: 1318.5, t: 0.15, d: 1, tau: 0.3, a: 0.45 },
-        { f: 1568, t: 0.3, d: 1.4, tau: 0.34, a: 0.45 },
-      ],
-      n = 1.5,
-      i = n + 1.8,
-      o = (h, k) => {
-        if (k < 0 || k >= h.d) return 0;
-        let y = Math.min(1, k / 0.012),
-          m = Math.exp(-k / h.tau),
-          O = Math.min(1, (h.d - k) / 0.04),
-          _ =
-            Math.sin(2 * Math.PI * h.f * k) +
-            0.15 * Math.sin(4 * Math.PI * h.f * k);
-        return (h.a * y * m * O * _) / 1.15;
-      },
-      a = (h, k, y) => {
-        let m = new Float32Array(Math.ceil(k * y));
-        return (
-          h.forEach(({ t: O, nuty: _ }) =>
-            _.forEach((E) => {
-              let M = Math.floor((O + E.t) * y),
-                I = Math.ceil(E.d * y);
-              for (let z = 0; z < I && M + z < m.length; z++)
-                M + z >= 0 && (m[M + z] += o(E, z / y));
-            }),
-          ),
-          m
-        );
-      },
-      l = (h) => {
-        let k = [];
-        return (
-          [3, 2, 1].forEach((y) => {
-            h - y >= -0.05 && k.push({ t: Math.max(0, h - y), nuty: t });
-          }),
-          k.push({ t: h, nuty: r }, { t: h + n, nuty: r }),
-          k
-        );
-      },
-      s = (h) => {
-        let k = Math.max(0, h),
-          y = a(l(k), k + i, 8e3),
-          m = new ArrayBuffer(44 + y.length * 2),
-          O = new DataView(m),
-          _ = (E, M) => {
-            for (let I = 0; I < M.length; I++)
-              O.setUint8(E + I, M.charCodeAt(I));
-          };
-        (_(0, "RIFF"),
-          O.setUint32(4, 36 + y.length * 2, !0),
-          _(8, "WAVE"),
-          _(12, "fmt "),
-          O.setUint32(16, 16, !0),
-          O.setUint16(20, 1, !0),
-          O.setUint16(22, 1, !0),
-          O.setUint32(24, 8e3, !0),
-          O.setUint32(28, 8e3 * 2, !0),
-          O.setUint16(32, 2, !0),
-          O.setUint16(34, 16, !0),
-          _(36, "data"),
-          O.setUint32(40, y.length * 2, !0));
-        for (let E = 0; E < y.length; E++)
-          O.setInt16(
-            44 + E * 2,
-            Math.max(-32767, Math.min(32767, Math.round(y[E] * 32767))),
-            !0,
-          );
-        return m;
-      },
-      u = (h) => {
-        let k = new Uint8Array(h),
-          y = "";
-        for (let m = 0; m < k.length; m += 32768)
-          y += String.fromCharCode.apply(null, k.subarray(m, m + 32768));
-        return btoa(y);
-      },
-      p = null,
-      f = null,
-      d = null,
-      g = !1,
-      w = !1,
-      x = {},
-      S = () => {
-        try {
-          return (
-            p || (p = new (window.AudioContext || window.webkitAudioContext)()),
-            p.state === "suspended" && p.resume(),
-            p
-          );
-        } catch {
-          return null;
-        }
-      },
-      v = (h, k, y) => {
-        let m = S();
-        if (m)
-          try {
-            if (!x[h]) {
-              let _ = a(k, y, m.sampleRate),
-                E = m.createBuffer(1, _.length, m.sampleRate);
-              (E.copyToChannel
-                ? E.copyToChannel(_, 0)
-                : E.getChannelData(0).set(_),
-                (x[h] = E));
-            }
-            let O = m.createBufferSource();
-            ((O.buffer = x[h]), O.connect(m.destination), O.start());
-          } catch {}
-      },
-      b = () => {
-        if (((g = !1), f))
-          try {
-            (f.pause(), f.removeAttribute("src"), f.load());
-          } catch {}
-        if (d) {
-          try {
-            URL.revokeObjectURL(d);
-          } catch {}
-          d = null;
-        }
-      };
-    return {
-      odblokuj(h) {
-        try {
-          navigator.audioSession &&
-            (navigator.audioSession.type = h ? "playback" : "ambient");
-        } catch {}
-        S();
-      },
-      start(h, k) {
-        if ((b(), !!k))
-          try {
-            f || ((f = new Audio()), (f.preload = "auto"));
-            let y = s(h);
-            (w
-              ? (f.src = "data:audio/wav;base64," + u(y))
-              : ((d = URL.createObjectURL(
-                  new Blob([y], { type: "audio/wav" }),
-                )),
-                (f.src = d)),
-              (f.onended = () => {
-                g = !1;
-              }),
-              (f.onerror = () => {
-                (g && !w && (w = !0), (g = !1));
-              }),
-              (g = !0));
-            let m = f.play();
-            m &&
-              m.catch &&
-              m.catch(() => {
-                g = !1;
-              });
-            try {
-              "mediaSession" in navigator &&
-                window.MediaMetadata &&
-                (navigator.mediaSession.metadata = new window.MediaMetadata({
-                  title: "Przerwa",
-                  artist: "Dziennik Gladiatora",
-                }));
-            } catch {}
-          } catch {
-            g = !1;
-          }
-      },
-      zatrzymaj: b,
-      klipGra() {
-        return !!(g && f && !f.paused && !f.ended);
-      },
-      pip() {
-        v("pip", [{ t: 0, nuty: t }], 0.3);
-      },
-      dzwonek() {
-        v(
-          "dzwonek",
-          [
-            { t: 0, nuty: r },
-            { t: n, nuty: r },
-          ],
-          i,
-        );
-      },
-    };
-  })();
+    );
 // Ciężar do wyświetlenia: przecinek zamiast kropki (zapis w danych bez zmian).
 var pokazKg = (e) => String(e ?? "").replace(".", ","),
   // Liczba do wyświetlenia bez ogonów typu 2,1999999999999993.
@@ -1666,24 +1481,6 @@ function Potw({ tytul: e, tekst: t, tak: r, onTak: n, onNie: i }) {
     ),
   );
 }
-// Pikanie przerwy w osobnym, małym komponencie: odświeża się 4× na sekundę tylko on,
-// a nie cała aplikacja (płynniejsze przewijanie i wpisywanie podczas przerwy).
-function Pikacz({ koniec: d, beeped: w }) {
-  let [, v] = (0, c.useState)(0);
-  (0, c.useEffect)(() => {
-    if (d == null) return;
-    let m = setInterval(() => v((O) => O + 1), 250);
-    return () => clearInterval(m);
-  }, [d]);
-  let b = d == null ? null : Math.ceil((d - Date.now()) / 1e3);
-  (0, c.useEffect)(() => {
-    if (b == null || Lr.klipGra()) return;
-    let m = w.current;
-    (b <= 3 && b >= 1 && !m.has(b) && (m.add(b), Lr.pip()),
-      b <= 0 && b > -3 && !m.has(0) && (m.add(0), Lr.dzwonek(), wibruj([0, 180, 90, 180])));
-  }, [b]);
-  return null;
-}
 // Wykres rysowany tuż po wyświetleniu ekranu (zakładka pokazuje się od razu, wykres chwilę później).
 function XsPozniej(e) {
   let [t, r] = (0, c.useState)(!1);
@@ -1696,6 +1493,174 @@ function XsPozniej(e) {
     }, []),
     t ? c.default.createElement(Xs, e) : null
   );
+}
+// Zegar przerwy: tylko odlicza czas, bez żadnego dźwięku. Widoczny na każdej zakładce i każdym ekranie,
+// dopóki trwa trening. Koniec przerwy jest zapamiętany osobno (poza danymi treningowymi),
+// więc zegar wraca także wtedy, gdy telefon zamknie aplikację działającą w tle.
+var PRZERWA_KLUCZ = "gb:przerwa";
+function czytajPrzerwe() {
+  try {
+    let z = JSON.parse(localStorage.getItem(PRZERWA_KLUCZ) || "null");
+    return z && typeof z.koniec == "number" && z.trening != null ? z : null;
+  } catch {
+    return null;
+  }
+}
+function zapiszPrzerwe(koniec, trening) {
+  try {
+    koniec == null
+      ? localStorage.removeItem(PRZERWA_KLUCZ)
+      : localStorage.setItem(PRZERWA_KLUCZ, JSON.stringify({ koniec, trening }));
+  } catch {}
+}
+var zegarWidoczny = (e) => {
+  let m = Xb(e.workouts);
+  return !!(m && m.entries.length);
+};
+function ZegarPrzerwy({
+  data: e,
+  save: t,
+  restEnd: M,
+  setRestEnd: I,
+  started: F,
+  restWorkoutId: W,
+  bezPaska: bp,
+}) {
+  let m = Xb(e.workouts),
+    id = m ? m.id : null,
+    widoczny = zegarWidoczny(e),
+    q = (e.ustawienia && e.ustawienia.przerwa) || 0,
+    [L, B] = (0, c.useState)(0),
+    pig = (0, c.useRef)(null),
+    ustaw = (k) => (I(k), zapiszPrzerwe(k, id));
+  // nowy trening = nowa przerwa; po ponownym otwarciu aplikacji przerwa tego samego treningu wraca
+  (0, c.useEffect)(() => {
+    if (W.current === id) return;
+    W.current = id;
+    let z = czytajPrzerwe();
+    id != null && z && z.trening === id && z.koniec > Date.now() - 18e5
+      ? I(z.koniec)
+      : (I(null), F.current.clear(), zapiszPrzerwe(null));
+  }, [id]);
+  // przy otwartej klawiaturze zegar stoi tuż nad nią, a pole, w którym piszesz, nie chowa się pod zegarem
+  (0, c.useEffect)(() => {
+    let vv = window.visualViewport;
+    if (!widoczny || !vv) return;
+    let klaw = () => {
+        let k = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+        return k > 120 ? Math.round(k) : 0;
+      },
+      ruch = () => B(klaw()),
+      odslon = () => {
+        let k = klaw();
+        B(k);
+        let a = document.activeElement,
+          pg = pig.current;
+        if (!k || !pg || !a || !a.matches || !a.matches("input, textarea")) return;
+        let granica = vv.offsetTop + vv.height - 12 - pg.offsetHeight - 10,
+          dol = a.getBoundingClientRect().bottom;
+        dol > granica && window.scrollBy(0, Math.ceil(dol - granica));
+      },
+      czas = null,
+      fokus = () => {
+        clearTimeout(czas);
+        czas = setTimeout(odslon, 80);
+      };
+    return (
+      ruch(),
+      vv.addEventListener("resize", odslon),
+      vv.addEventListener("scroll", ruch),
+      document.addEventListener("focusin", fokus),
+      () => {
+        (clearTimeout(czas),
+          vv.removeEventListener("resize", odslon),
+          vv.removeEventListener("scroll", ruch),
+          document.removeEventListener("focusin", fokus));
+      }
+    );
+  }, [widoczny]);
+  if (!widoczny) return null;
+  let start = () => {
+      q <= 0 || (wibruj(10), ustaw(Date.now() + q * 1e3));
+    },
+    stop = () => {
+      (wibruj(10), ustaw(null));
+    },
+    zmien = (ee) => {
+      let ie = Math.max(0, Math.min(900, q + ee)),
+        te = ie - q;
+      (t({ ...e, ustawienia: { ...(e.ustawienia || {}), przerwa: ie } }),
+        M != null && M > Date.now() && te && ustaw(M + te * 1e3));
+    },
+    X = (ee) => (ee >= 0 ? hc(ee) : `-${hc(-ee)}`);
+  return c.default.createElement(Tik, { co: M != null ? 250 : 0 }, () => {
+    let V = M == null ? null : Math.ceil((M - Date.now()) / 1e3),
+      H = V != null && V > 0,
+      J = V != null && V <= 0;
+    return c.default.createElement(
+      "div",
+      {
+        ref: pig,
+        className: `gb-rest-pill${bp ? " bez-paska" : ""}${V != null && V <= 3 && V >= 1 ? " alarm" : ""}${J ? " over" : ""}`,
+        style: L ? { bottom: L + 12 } : void 0,
+      },
+      c.default.createElement("i", {
+        className: "gb-rest-postep",
+        "aria-hidden": "true",
+        style: {
+          transform: `scaleX(${
+            H
+              ? Math.min(1, Math.max(0, 1 - (M - Date.now()) / Math.max(q * 1e3, M - Date.now(), 1)))
+              : J
+                ? 1
+                : 0
+          })`,
+        },
+      }),
+      c.default.createElement(
+        "button",
+        {
+          className: "gb-rest-step",
+          onClick: () => zmien(-15),
+          "aria-label": "Skr\xF3ć o 15 sekund",
+        },
+        "−",
+      ),
+      c.default.createElement(
+        "span",
+        { className: "gb-rest-time" },
+        c.default.createElement(
+          "span",
+          { className: "gb-rest-num" },
+          V != null ? X(V) : hc(q),
+        ),
+        c.default.createElement(
+          "span",
+          { className: "gb-rest-lab" },
+          J ? "Po czasie" : H ? `Przerwa: ${hc(q)}` : "Przerwa",
+        ),
+      ),
+      c.default.createElement(
+        "button",
+        {
+          className: "gb-rest-step",
+          onClick: () => zmien(15),
+          "aria-label": "Wydłuż o 15 sekund",
+        },
+        "+",
+      ),
+      c.default.createElement(
+        "button",
+        {
+          className: `gb-rest-go${H ? " stop" : ""}`,
+          onClick: () => (H ? stop() : start()),
+          disabled: !H && q <= 0,
+          "aria-label": H ? "Zatrzymaj przerwę" : "Start przerwy",
+        },
+        H ? "Stop" : "Start",
+      ),
+    );
+  });
 }
 // Fragment ekranu odświeżany co określony czas (zegary), bez odświeżania reszty ekranu.
 function Tik({ co: e, children: t }) {
@@ -1916,8 +1881,18 @@ function Yb() {
     c.default.createElement("style", null, ZI),
     c.default.createElement(
       "div",
-      { className: "gb-shell" },
-      c.default.createElement(Pikacz, { koniec: d, beeped: w }),
+      {
+        className: `gb-shell${zegarWidoczny(e) ? " z-przerwa" : ""}${s || i || a ? " bez-paska" : ""}`,
+      },
+      c.default.createElement(ZegarPrzerwy, {
+        data: e,
+        save: h,
+        restEnd: d,
+        setRestEnd: g,
+        started: x,
+        restWorkoutId: S,
+        bezPaska: !!(s || i || a),
+      }),
       konflikt &&
         c.default.createElement(
           "div",
@@ -1966,11 +1941,8 @@ function Yb() {
                       home: p,
                       setHome: f,
                       restCtx: {
-                        restEnd: d,
-                        setRestEnd: g,
-                        beeped: w,
                         started: x,
-                        restWorkoutId: S,
+                        stop: () => (g(null), zapiszPrzerwe(null)),
                       },
                       openLib: (m) => o(m ? { superOf: m } : !0),
                       openTpl: () => l(!0),
@@ -2383,14 +2355,7 @@ function pte({
     [, _] = (0, c.useState)(0),
     E = (0, c.useRef)(null);
   ((v = zPrzejsciem(v)), (h = zPrzejsciem(h)));
-  let {
-      restEnd: M,
-      setRestEnd: I,
-      beeped: z,
-      started: F,
-      restWorkoutId: W,
-    } = u,
-    [q, P] = (0, c.useState)((e.ustawienia && e.ustawienia.przerwa) || 0),
+  let { started: F, stop: zatrzymajPrzerwe } = u,
     N = (0, c.useRef)(null),
     T = (0, c.useRef)({ x: 0, y: 0 }),
     A = (0, c.useRef)(null),
@@ -2400,104 +2365,8 @@ function pte({
     };
   (0, c.useEffect)(() => {
     f(!1);
-    let ee = m?.id ?? null;
-    W.current !== ee &&
-      ((W.current = ee),
-      M != null && Lr.zatrzymaj(),
-      I(null),
-      F.current.clear(),
-      z.current.clear());
   }, [m?.id]);
-  let [L, B] = (0, c.useState)(0);
-  (0, c.useEffect)(() => {
-    let ee = window.visualViewport;
-    if (!ee) return;
-    let ie = () => {
-      let te = Math.max(0, window.innerHeight - ee.height - ee.offsetTop);
-      B(te > 120 ? Math.round(te) : 0);
-    };
-    return (
-      ie(),
-      ee.addEventListener("resize", ie),
-      ee.addEventListener("scroll", ie),
-      () => {
-        (ee.removeEventListener("resize", ie),
-          ee.removeEventListener("scroll", ie));
-      }
-    );
-  }, []);
-  let [$, G] = (0, c.useState)(null);
-  (0, c.useEffect)(() => {
-    let ee = (re) =>
-        !!(re && re.matches && re.matches("input.gb-in, textarea.gb-note")),
-      ie = null,
-      te = (re) => {
-        let Xe = (re.closest("tr") || re).getBoundingClientRect();
-        G(Math.round(Xe.top + window.scrollY));
-      },
-      ue = (re) => {
-        ee(re.target) &&
-          (te(re.target),
-          clearTimeout(ie),
-          (ie = setTimeout(() => {
-            document.activeElement === re.target && te(re.target);
-          }, 400)));
-      },
-      ce = () => {
-        setTimeout(() => {
-          ee(document.activeElement) || G(null);
-        }, 60);
-      };
-    return (
-      document.addEventListener("focusin", ue),
-      document.addEventListener("focusout", ce),
-      () => {
-        (clearTimeout(ie),
-          document.removeEventListener("focusin", ue),
-          document.removeEventListener("focusout", ce));
-      }
-    );
-  }, []);
-  let V = M == null ? null : Math.ceil((M - Date.now()) / 1e3),
-    X = (ee) => (ee >= 0 ? hc(ee) : `-${hc(-ee)}`),
-    le = !!(e.ustawienia && e.ustawienia.dzwiekWTle === !0),
-    H = V != null && V > 0,
-    J = V != null && V <= 0,
-    Z = () => {
-      q <= 0 ||
-        (wibruj(10),
-        z.current.clear(),
-        Lr.odblokuj(le),
-        Lr.start(q, le),
-        I(Date.now() + q * 1e3));
-    },
-    U = () => {
-      (wibruj(10), z.current.clear(), Lr.zatrzymaj(), I(null));
-    },
-    me = (ee) => {
-      let ie = Math.max(0, Math.min(900, q + ee)),
-        te = ie - q;
-      if (
-        (P(ie),
-        t({ ...e, ustawienia: { ...(e.ustawienia || {}), przerwa: ie } }),
-        M != null && M > Date.now() && te)
-      ) {
-        let ue = M + te * 1e3;
-        (z.current.clear(),
-          Lr.odblokuj(le),
-          Lr.start((ue - Date.now()) / 1e3, le),
-          I(ue));
-      }
-    },
-    se = () => {
-      let ee = !le;
-      (t({ ...e, ustawienia: { ...(e.ustawienia || {}), dzwiekWTle: ee } }),
-        Lr.odblokuj(ee),
-        M != null && M > Date.now()
-          ? Lr.start((M - Date.now()) / 1e3, ee)
-          : Lr.zatrzymaj());
-    },
-    ye = (ee) => {
+  let ye = (ee) => {
       let ie = [];
       return (
         ee.forEach((te) => {
@@ -2557,7 +2426,7 @@ function pte({
         return;
       }
       let ie = m.id;
-      (U(), O((te) => ({ ...te, finished: !0, endedAt: Date.now() })), v(ie));
+      (zatrzymajPrzerwe(), O((te) => ({ ...te, finished: !0, endedAt: Date.now() })), v(ie));
     };
   if (S) {
     let ee = e.workouts.find((ie) => ie.id === S);
@@ -3281,106 +3150,6 @@ function pte({
       { className: "gb-cta gb-finish", onClick: We },
       "Zako\u0144cz trening",
     ),
-    c.default.createElement(
-      "div",
-      { className: "gb-setrow" },
-      c.default.createElement(
-        "span",
-        { className: "gb-setmain" },
-        c.default.createElement("b", null, "D\u017Awi\u0119k przerwy w tle"),
-        c.default.createElement(
-          "small",
-          null,
-          le
-            ? "S\u0142ycha\u0107 go te\u017C przy zablokowanym ekranie i w innych aplikacjach. Muzyka z innych aplikacji mo\u017Ce si\u0119 wtedy zatrzyma\u0107 na czas przerwy."
-            : "Sygna\u0142 tylko przy otwartej aplikacji. Muzyka z innych aplikacji gra bez przerw.",
-        ),
-      ),
-      c.default.createElement(
-        "button",
-        {
-          className: `gb-switch${le ? " on" : ""}`,
-          role: "switch",
-          "aria-checked": le,
-          "aria-label": "D\u017Awi\u0119k przerwy w tle",
-          onClick: se,
-        },
-        c.default.createElement("i", null),
-      ),
-    ),
-    c.default.createElement("div", { style: { height: 92 } }),
-    c.default.createElement(Tik, { co: M != null ? 250 : 0 }, () => {
-      let V = M == null ? null : Math.ceil((M - Date.now()) / 1e3),
-        H = V != null && V > 0,
-        J = V != null && V <= 0;
-      return (
-    c.default.createElement(
-      "div",
-      {
-        className: `gb-rest-pill${V != null && V <= 3 && V >= 1 ? " alarm" : ""}${J ? " over" : ""}`,
-        style: L
-          ? { bottom: L + 12 }
-          : $ != null
-            ? { position: "absolute", top: Math.max(8, $ - 60), bottom: "auto" }
-            : void 0,
-      },
-      c.default.createElement("i", {
-        className: "gb-rest-postep",
-        "aria-hidden": "true",
-        style: {
-          transform: `scaleX(${
-            H
-              ? Math.min(1, Math.max(0, 1 - (M - Date.now()) / Math.max(q * 1e3, M - Date.now(), 1)))
-              : J
-                ? 1
-                : 0
-          })`,
-        },
-      }),
-      c.default.createElement(
-        "button",
-        {
-          className: "gb-rest-step",
-          onClick: () => me(-15),
-          "aria-label": "Skr\xF3\u0107 o 15 sekund",
-        },
-        "\u2212",
-      ),
-      c.default.createElement(
-        "span",
-        { className: "gb-rest-time" },
-        c.default.createElement(
-          "span",
-          { className: "gb-rest-num" },
-          V != null ? X(V) : hc(q),
-        ),
-        c.default.createElement(
-          "span",
-          { className: "gb-rest-lab" },
-          J ? "Po czasie" : H ? `Przerwa: ${hc(q)}` : "Przerwa",
-        ),
-      ),
-      c.default.createElement(
-        "button",
-        {
-          className: "gb-rest-step",
-          onClick: () => me(15),
-          "aria-label": "Wyd\u0142u\u017C o 15 sekund",
-        },
-        "+",
-      ),
-      c.default.createElement(
-        "button",
-        {
-          className: `gb-rest-go${H ? " stop" : ""}`,
-          onClick: () => (H ? U() : Z()),
-          disabled: !H && q <= 0,
-          "aria-label": H ? "Zatrzymaj przerw\u0119" : "Start przerwy",
-        },
-        H ? "Stop" : "Start",
-      ),
-    ));
-    }),
   );
 }
 function dte({ data: e, save: t, all: r, close: n, superOf: i }) {
